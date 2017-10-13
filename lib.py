@@ -1,3 +1,5 @@
+from ortools.linear_solver import pywraplp
+
 class Expression:
     def __init__(self, expr, constant=0):
         self._expr = expr
@@ -40,14 +42,14 @@ class Expression:
     def __abs__(self):
         return Problem.abs(self)
     
-    def __lt__(self, rhs):
-        return Polytope(((-self - rhs, '>'),))
+    #def __lt__(self, rhs):
+    #    return Polytope(((-self - rhs, '>'),))
 
     def __le__(self, rhs):
         return Polytope(((-self - rhs, '>='),))
 
-    def __gt__(self, rhs):
-        return Polytope(((self - rhs, '>'),))
+    #def __gt__(self, rhs):
+    #    return Polytope(((self - rhs, '>'),))
 
     def __ge__(self, rhs):
         return Polytope(((self - rhs, '>='),))
@@ -113,8 +115,30 @@ class Problem:
     def abs(m):
         z_neg = Variable('z_neg', lo=0, hi=None)
         z_pos = Variable('z_pos', lo=0, hi=None)
-        print(m + z_neg + z_pos == 0)
         return Problem(m + z_neg + z_pos == 0, z_neg + z_pos)
+
+    def solve(self):
+        solver = pywraplp.Solver('', pywraplp.Solver.GLOP_LINEAR_PROGRAMMING)
+        vs = {}
+        objective = solver.Objective()
+        def get_var(v):
+            if v._id not in vs:
+                vs[v._id] = solver.NumVar(v._lo if v._lo is not None else -solver.infinity(),
+                                          v._hi if v._hi is not None else -solver.infinity(),
+                                          '%s_%s' % (v._name, v._id))
+            return vs[v._id]
+            
+        for k, v in self._objective._expr:
+            objective.SetCoefficient(get_var(v), k)
+        for c, op in self._polytope._constraints:
+            if op == '==':
+                constraint = solver.Constraint(0, 0)
+            elif op == '>=':
+                constraint = solver.Constraint(0, solver.infinity())
+            for k, v in c._expr:
+                constraint.SetCoefficient(get_var(v), k)
+        print(solver.Solve())
+                
 
     def __str__(self):
         return 'Problem(min %s s.t. %s)' % (self._objective, self._polytope)
@@ -122,8 +146,8 @@ class Problem:
 x = Variable('x')
 y = Variable('y')
 z = Variable('z')
-c1 = 3 * (x - y*2) > 7 * x
-c2 = z < y
+c1 = 3 * (x - y*2) >= 7 * x
+c2 = z <= y
 print(c1 & c2)
 print(c1 | c2)
-print(abs(x - y))
+abs(x - y).solve()
