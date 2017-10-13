@@ -118,13 +118,13 @@ class Problem:
         return Problem(m + z_neg + z_pos == 0, z_neg + z_pos)
 
     def solve(self):
-        solver = pywraplp.Solver('', pywraplp.Solver.GLOP_LINEAR_PROGRAMMING)
+        solver = pywraplp.Solver('test', pywraplp.Solver.GLOP_LINEAR_PROGRAMMING)
         vs = {}
         objective = solver.Objective()
         def get_var(v):
             if v._id not in vs:
                 vs[v._id] = solver.NumVar(v._lo if v._lo is not None else -solver.infinity(),
-                                          v._hi if v._hi is not None else -solver.infinity(),
+                                          v._hi if v._hi is not None else solver.infinity(),
                                           '%s_%s' % (v._name, v._id))
             return vs[v._id]
             
@@ -137,17 +137,16 @@ class Problem:
                 constraint = solver.Constraint(0, solver.infinity())
             for k, v in c._expr:
                 constraint.SetCoefficient(get_var(v), k)
-        print(solver.Solve())
-                
+        return solver.Solve()
 
     def __str__(self):
         return 'Problem(min %s s.t. %s)' % (self._objective, self._polytope)
 
-x = Variable('x')
-y = Variable('y')
-z = Variable('z')
-c1 = 3 * (x - y*2) >= 7 * x
-c2 = z <= y
-print(c1 & c2)
-print(c1 | c2)
-abs(x - y).solve()
+x = Variable('x', lo=0)
+y = Variable('y', lo=0)
+z = Variable('z', lo=0)
+polytope = (3 * (x + y + 5*z) <= 34) & \
+           (9 * (y + z) <= 52) & \
+           (1 + x + 3*z <= 15)
+problem = Problem(polytope, x+y+z)
+problem.solve()
