@@ -15,8 +15,15 @@ class Expression:
             return Expression(self._expr, self._constant + rhs)
         else:
             assert isinstance(rhs, Expression)
-            # TODO: should dedupe variables here
-            return Expression(self._expr + rhs._expr, self._constant + rhs._constant)
+            coeffs = {}
+            vs = {}
+            for c, v in self._expr:
+                coeffs[v._id] = c
+                vs[v._id] = v
+            for c, v in rhs._expr:
+                coeffs[v._id] = coeffs.get(v._id, 0) + c
+                vs[v._id] = v
+            return Expression(tuple((coeffs[v._id], v) for v in vs.values()), self._constant + rhs._constant)
 
     def __radd__(self, lhs):
         return self * lhs
@@ -53,6 +60,7 @@ class Expression:
 
 
 class Variable(Expression):
+    _id = 0
     def __init__(self, name=None, lo=None, hi=None, cat=None):
         self._name = name
         self._expr = ((1, self),)
@@ -60,6 +68,8 @@ class Variable(Expression):
         self._lo = lo
         self._hi = hi
         self._cat = cat
+        Variable._id += 1
+        self._id = Variable._id
 
     def __str__(self):
         return self._name
