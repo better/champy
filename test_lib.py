@@ -7,8 +7,11 @@ def test_simple():
 
     polytope = (x + 3*y <= 5) & \
                (3*x + y <= 5)
-    problem = Problem(polytope, x+y)
-    solution = problem.solve()
 
+    solution = polytope.maximize(x+y)
     assert solution[x] == pytest.approx(1.25)
     assert solution[y] == pytest.approx(1.25)
+
+    solution = polytope.maximize(x)
+    assert solution[x] == pytest.approx(5./3)
+    assert solution[y] == pytest.approx(0)

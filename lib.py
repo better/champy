@@ -125,51 +125,44 @@ class Polytope:
     def __or__(self, rhs):
         return Polytope.any((self, rhs))
     
-    def __str__(self):
-        return 'Polytope(%s)' % ', '.join('%s %s 0' % (str(expr), op) for expr, op in self._constraints)
+#    @staticmethod
+#    def abs(m):
+#        z_neg = Variable('z_neg', lo=0, hi=None)
+#        z_pos = Variable('z_pos', lo=0, hi=None)
+#        return Problem(m + z_neg + z_pos == 0, z_neg + z_pos)
 
-
-class Problem:
-    # TODO: some types of problems, like abs(x-y), are more like a *constrained* expression,
-    # so it would make sense to make this class a subclass of Expression, or merge the two.
-    # Open question: how do you perform expression algebra in the presence of constraints
-    # Eg. should you merge the constraints when you do abs(x+y) < abs(z+w)? I think so.
-    def __init__(self, polytope, objective):
-        self._polytope = polytope
-        self._objective = objective
-
-    @staticmethod
-    def abs(m):
-        z_neg = Variable('z_neg', lo=0, hi=None)
-        z_pos = Variable('z_pos', lo=0, hi=None)
-        return Problem(m + z_neg + z_pos == 0, z_neg + z_pos)
-
-    def solve(self):
-        solver = pywraplp.Solver('test', pywraplp.Solver.GLOP_LINEAR_PROGRAMMING)
-        vs = {}
-        objective = solver.Objective()
+    def optimize(self, objective, sign):
+        ot_solver = pywraplp.Solver('test', pywraplp.Solver.GLOP_LINEAR_PROGRAMMING)
+        ot_variables = {}
+        ot_objective = ot_solver.Objective()
         def get_var(v):
-            if v not in vs:
-                vs[v] = solver.NumVar(v._lo if v._lo is not None else -solver.infinity(),
-                                      v._hi if v._hi is not None else solver.infinity(),
-                                      '%s_%s' % (v._name, v._id))
-            return vs[v]
+            if v not in ot_variables:
+                ot_variables[v] = ot_solver.NumVar(v._lo if v._lo is not None else -ot_solver.infinity(),
+                                                   v._hi if v._hi is not None else ot_solver.infinity(),
+                                                   '%s_%s' % (v._name, v._id))
+            return ot_variables[v]
 
-        for k, v in self._objective._expr:
-            objective.SetCoefficient(get_var(v), k)
-        objective.SetMaximization()
-        for c, op in self._polytope._constraints:
+        for k, v in objective._expr:
+            ot_objective.SetCoefficient(get_var(v), k * sign)
+        ot_objective.SetMaximization()
+        for c, op in self._constraints:
             if op == '==':
-                constraint = solver.Constraint(c._constant, c._constant)
+                ot_constraint = ot_solver.Constraint(c._constant, c._constant)
             elif op == '>=':
-                constraint = solver.Constraint(c._constant, solver.infinity())
+                ot_constraint = ot_solver.Constraint(c._constant, ot_solver.infinity())
             for k, v in c._expr:
-                constraint.SetCoefficient(get_var(v), k)
-        res = solver.Solve()
+                ot_constraint.SetCoefficient(get_var(v), k)
+        res = ot_solver.Solve()
         solution = {}
-        for v, nv in vs.items():
+        for v, nv in ot_variables.items():
             solution[v] = nv.solution_value()
         return solution
 
+    def maximize(self, objective):
+        return self.optimize(objective, 1)
+
+    def minimize(self, objective):
+        return self.optimize(objective, -1)
+
     def __str__(self):
-        return 'Problem(min %s s.t. %s)' % (self._objective, self._polytope)
+        return 'Polytope(%s)' % ', '.join('%s %s 0' % (str(expr), op) for expr, op in self._constraints)
