@@ -149,12 +149,12 @@ class Problem:
         vs = {}
         objective = solver.Objective()
         def get_var(v):
-            if v._id not in vs:
-                vs[v._id] = (v, solver.NumVar(v._lo if v._lo is not None else -solver.infinity(),
-                                              v._hi if v._hi is not None else solver.infinity(),
-                                              '%s_%s' % (v._name, v._id)))
-            return vs[v._id][1]
-            
+            if v not in vs:
+                vs[v] = solver.NumVar(v._lo if v._lo is not None else -solver.infinity(),
+                                      v._hi if v._hi is not None else solver.infinity(),
+                                      '%s_%s' % (v._name, v._id))
+            return vs[v]
+
         for k, v in self._objective._expr:
             objective.SetCoefficient(get_var(v), k)
         objective.SetMaximization()
@@ -167,7 +167,7 @@ class Problem:
                 constraint.SetCoefficient(get_var(v), k)
         res = solver.Solve()
         solution = {}
-        for k, (v, nv) in vs.items():
+        for v, nv in vs.items():
             solution[v] = nv.solution_value()
         return solution
 
