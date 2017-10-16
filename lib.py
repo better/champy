@@ -28,7 +28,7 @@ class Expression:
             return Expression(tuple((c, v) for v, c in vs.items()), self._constant + rhs._constant)
 
     def __radd__(self, lhs):
-        return self * lhs
+        return self + lhs
 
     def __neg__(self):
         return self * -1
@@ -108,13 +108,13 @@ class Polytope:
     def any(polytopes, big_M=999999):
         # This one is the most interesting
         polytopes = tuple(polytopes)
-        magic = [Variable('magic', 0, 1, 'binary') for p in polytopes]
+        magic = [Variable('magic', type=bool) for p in polytopes]
         new_constraints = []
         for polytope, m in zip(polytopes, magic):
             for expr, op in polytope._constraints:
+                # TODO: need to handle equality constraints here
                 new_constraints.append((expr + m * big_M, op))
-        return Polytope(new_constraints) & \
-            (sum(magic) <= len(polytopes)-1)
+        return Polytope(new_constraints) & (sum(magic) <= len(polytopes)-1)
 
     def __and__(self, rhs):
         return Polytope.all((self, rhs))
@@ -132,12 +132,14 @@ class Polytope:
         ot_solver = pywraplp.Solver('test', pywraplp.Solver.CBC_MIXED_INTEGER_PROGRAMMING)
         ot_variables = {}
         ot_objective = ot_solver.Objective()
+        cls = {int: lambda lo, hi, name: ot_solver.IntVar(lo, hi, name),
+               float: lambda lo, hi, name: ot_solver.NumVar(lo, hi, name),
+               bool: lambda lo, hi, name: ot_solver.BoolVar(name)}
         def get_var(v):
             if v not in ot_variables:
-                cls = {int: ot_solver.IntVar, float: ot_solver.NumVar}[v._type]
-                ot_variables[v] = cls(v._lo if v._lo is not None else -ot_solver.infinity(),
-                                      v._hi if v._hi is not None else ot_solver.infinity(),
-                                      v._id)
+                ot_variables[v] = cls[v._type](v._lo if v._lo is not None else -ot_solver.infinity(),
+                                               v._hi if v._hi is not None else ot_solver.infinity(),
+                                               v._id)
             return ot_variables[v]
 
         for k, v in objective._expr:
