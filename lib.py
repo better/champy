@@ -20,15 +20,12 @@ class Expression:
             return Expression(self._expr, self._constant + rhs)
         else:
             assert isinstance(rhs, Expression)
-            coeffs = {}
             vs = {}
             for c, v in self._expr:
-                coeffs[v._id] = c
-                vs[v._id] = v
+                vs[v] = vs.get(v, 0) + c
             for c, v in rhs._expr:
-                coeffs[v._id] = coeffs.get(v._id, 0) + c
-                vs[v._id] = v
-            return Expression(tuple((coeffs[v._id], v) for v in vs.values()), self._constant + rhs._constant)
+                vs[v] = vs.get(v, 0) + c
+            return Expression(tuple((c, v) for v, c in vs.items()), self._constant + rhs._constant)
 
     def __radd__(self, lhs):
         return self * lhs
@@ -66,13 +63,13 @@ class Expression:
 
 class Variable(Expression):
     _ids = {}
-    def __init__(self, name=None, lo=None, hi=None, cat=None):
+    def __init__(self, name=None, lo=None, hi=None, type=float):
         self._name = name
         self._expr = ((1, self),)
         self._constant = 0
         self._lo = lo
         self._hi = hi
-        self._cat = cat
+        self._type=type
         if name is None:
             id = 'untitled'
         else:
@@ -132,14 +129,15 @@ class Polytope:
 #        return Problem(m + z_neg + z_pos == 0, z_neg + z_pos)
 
     def optimize(self, objective, sign):
-        ot_solver = pywraplp.Solver('test', pywraplp.Solver.GLOP_LINEAR_PROGRAMMING)
+        ot_solver = pywraplp.Solver('test', pywraplp.Solver.CBC_MIXED_INTEGER_PROGRAMMING)
         ot_variables = {}
         ot_objective = ot_solver.Objective()
         def get_var(v):
             if v not in ot_variables:
-                ot_variables[v] = ot_solver.NumVar(v._lo if v._lo is not None else -ot_solver.infinity(),
-                                                   v._hi if v._hi is not None else ot_solver.infinity(),
-                                                   '%s_%s' % (v._name, v._id))
+                cls = {int: ot_solver.IntVar, float: ot_solver.NumVar}[v._type]
+                ot_variables[v] = cls(v._lo if v._lo is not None else -ot_solver.infinity(),
+                                      v._hi if v._hi is not None else ot_solver.infinity(),
+                                      v._id)
             return ot_variables[v]
 
         for k, v in objective._expr:
