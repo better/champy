@@ -12,6 +12,9 @@ class Expression:
     def __rmul__(self, lhs):
         return self * lhs
 
+    def __truediv__(self, rhs):
+        return self * (1./rhs)
+
     def __add__(self, rhs):
         if type(rhs) in [float, int]:
             return Expression(self._expr, self._constant + rhs)
@@ -62,7 +65,7 @@ class Expression:
 
 
 class Variable(Expression):
-    _id = 0
+    _ids = {}
     def __init__(self, name=None, lo=None, hi=None, cat=None):
         self._name = name
         self._expr = ((1, self),)
@@ -70,11 +73,30 @@ class Variable(Expression):
         self._lo = lo
         self._hi = hi
         self._cat = cat
-        Variable._id += 1
-        self._id = Variable._id
+        if name is None:
+            id = 'untitled'
+        else:
+            id = name
+        if name in Variable._ids:
+            id += '_%d' % Variable._ids[name]
+        Variable._ids[name] = Variable._ids.get(name, 0) + 1
+        self._id = id
 
     def __str__(self):
-        return self._name
+        return self._id
+
+    def __hash__(self):
+        return hash(self._id)
+
+
+class CategoricalVariable:
+    # This actually isn't a variable, just a convenience wrapper
+    def __init__(self, name='untitled', options=[]):
+        self._name = name
+        self._options = {o: Variable(name='%s==%s' % (name, o)) for o in options}
+
+    def __eq__(self, rhs):
+        return self == self._options[rhs]
 
 
 class Polytope:
@@ -88,6 +110,7 @@ class Polytope:
     @staticmethod
     def any(polytopes, big_M=999999):
         # This one is the most interesting
+        polytopes = tuple(polytopes)
         magic = [Variable('magic', 0, 1, 'binary') for p in polytopes]
         new_constraints = []
         for polytope, m in zip(polytopes, magic):
@@ -107,6 +130,10 @@ class Polytope:
 
 
 class Problem:
+    # TODO: some types of problems, like abs(x-y), are more like a *constrained* expression,
+    # so it would make sense to make this class a subclass of Expression, or merge the two.
+    # Open question: how do you perform expression algebra in the presence of constraints
+    # Eg. should you merge the constraints when you do abs(x+y) < abs(z+w)? I think so.
     def __init__(self, polytope, objective):
         self._polytope = polytope
         self._objective = objective
@@ -123,30 +150,26 @@ class Problem:
         objective = solver.Objective()
         def get_var(v):
             if v._id not in vs:
-                vs[v._id] = solver.NumVar(v._lo if v._lo is not None else -solver.infinity(),
-                                          v._hi if v._hi is not None else solver.infinity(),
-                                          '%s_%s' % (v._name, v._id))
-            return vs[v._id]
+                vs[v._id] = (v, solver.NumVar(v._lo if v._lo is not None else -solver.infinity(),
+                                              v._hi if v._hi is not None else solver.infinity(),
+                                              '%s_%s' % (v._name, v._id)))
+            return vs[v._id][1]
             
         for k, v in self._objective._expr:
             objective.SetCoefficient(get_var(v), k)
+        objective.SetMaximization()
         for c, op in self._polytope._constraints:
             if op == '==':
-                constraint = solver.Constraint(0, 0)
+                constraint = solver.Constraint(c._constant, c._constant)
             elif op == '>=':
-                constraint = solver.Constraint(0, solver.infinity())
+                constraint = solver.Constraint(c._constant, solver.infinity())
             for k, v in c._expr:
                 constraint.SetCoefficient(get_var(v), k)
-        return solver.Solve()
+        res = solver.Solve()
+        solution = {}
+        for k, (v, nv) in vs.items():
+            solution[v] = nv.solution_value()
+        return solution
 
     def __str__(self):
         return 'Problem(min %s s.t. %s)' % (self._objective, self._polytope)
-
-x = Variable('x', lo=0)
-y = Variable('y', lo=0)
-z = Variable('z', lo=0)
-polytope = (3 * (x + y + 5*z) <= 34) & \
-           (9 * (y + z) <= 52) & \
-           (1 + x + 3*z <= 15)
-problem = Problem(polytope, x+y+z)
-problem.solve()
