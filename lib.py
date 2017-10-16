@@ -1,13 +1,18 @@
 from ortools.linear_solver import pywraplp
 
 class Expression:
-    def __init__(self, expr, constant=0):
+    def __init__(self, expr, constant=0, polytope=None):
         self._expr = expr
         self._constant = constant
+        self._polytope = polytope # only used for certain ones tied to the definition (see abs)
 
     def __mul__(self, rhs):
         assert type(rhs) in [float, int]
-        return Expression(tuple((k*rhs, v) for k, v in self._expr))
+        return Expression(
+            tuple((k*rhs, v) for k, v in self._expr),
+            self._constant*rhs,
+            self._polytope
+        )
 
     def __rmul__(self, lhs):
         return self * lhs
@@ -17,7 +22,11 @@ class Expression:
 
     def __add__(self, rhs):
         if type(rhs) in [float, int]:
-            return Expression(self._expr, self._constant + rhs)
+            return Expression(
+                self._expr,
+                self._constant + rhs,
+                self._polytope
+            )
         else:
             assert isinstance(rhs, Expression)
             vs = {}
@@ -25,7 +34,11 @@ class Expression:
                 vs[v] = vs.get(v, 0) + c
             for c, v in rhs._expr:
                 vs[v] = vs.get(v, 0) + c
-            return Expression(tuple((c, v) for v, c in vs.items()), self._constant + rhs._constant)
+            return Expression(
+                tuple((c, v) for v, c in vs.items()),
+                self._constant + rhs._constant,
+                self._polytope
+            )
 
     def __radd__(self, lhs):
         return self + lhs
@@ -38,9 +51,6 @@ class Expression:
 
     def __rsub__(self, lhs):
         return lhs + (-self)
-
-    def __abs__(self):
-        return Problem.abs(self)
     
     #def __lt__(self, rhs):
     #    return Polytope(((-self - rhs, '>'),))
@@ -57,16 +67,25 @@ class Expression:
     def __eq__(self, rhs):
         return Polytope(((self - rhs, '=='),))
 
+    def __abs__(self):
+        z_neg = Variable('z_neg', lo=0, hi=None)
+        z_pos = Variable('z_pos', lo=0, hi=None)
+        return Expression(
+            ((1, z_neg), (1, z_pos)),
+            0,
+            self + z_neg + z_pos == 0)
+
     def __str__(self):
         return 'Expression(%s+%.2f)' % (''.join('%+.2f%s' % (k, v) for k, v in self._expr), self._constant)
+
+    def __repr__(self):
+        return str(self)
 
 
 class Variable(Expression):
     _ids = {}
     def __init__(self, name=None, lo=None, hi=None, type=float):
         self._name = name
-        self._expr = ((1, self),)
-        self._constant = 0
         self._lo = lo
         self._hi = hi
         self._type=type
@@ -78,9 +97,13 @@ class Variable(Expression):
             id += '_%d' % Variable._ids[name]
         Variable._ids[name] = Variable._ids.get(name, 0) + 1
         self._id = id
+        super(Variable, self).__init__(((1, self),))
 
     def __str__(self):
         return self._id
+
+    def __repr__(self):
+        return 'Variable#%s' % self._id
 
     def __hash__(self):
         return hash(self._id)
@@ -90,7 +113,7 @@ class CategoricalVariable:
     # This actually isn't a variable, just a convenience wrapper
     def __init__(self, name='untitled', options=[]):
         self._name = name
-        self._options = {o: Variable(name='%s==%s' % (name, o)) for o in options}
+        self.options = {o: Variable(name='%s==%s' % (name, o), type=bool) for o in options}
 
     def __eq__(self, rhs):
         return self == self._options[rhs]
@@ -122,12 +145,6 @@ class Polytope:
     def __or__(self, rhs):
         return Polytope.any((self, rhs))
     
-#    @staticmethod
-#    def abs(m):
-#        z_neg = Variable('z_neg', lo=0, hi=None)
-#        z_pos = Variable('z_pos', lo=0, hi=None)
-#        return Problem(m + z_neg + z_pos == 0, z_neg + z_pos)
-
     def optimize(self, objective, sign):
         ot_solver = pywraplp.Solver('test', pywraplp.Solver.CBC_MIXED_INTEGER_PROGRAMMING)
         ot_variables = {}
@@ -145,6 +162,7 @@ class Polytope:
         for k, v in objective._expr:
             ot_objective.SetCoefficient(get_var(v), k * sign)
         ot_objective.SetMaximization()
+        # TODO: need some recursive thing here to find all constraints
         for c, op in self._constraints:
             if op == '==':
                 ot_constraint = ot_solver.Constraint(c._constant, c._constant)
@@ -166,3 +184,6 @@ class Polytope:
 
     def __str__(self):
         return 'Polytope(%s)' % ', '.join('%s %s 0' % (str(expr), op) for expr, op in self._constraints)
+
+    def __repr__(self):
+        return str(self)

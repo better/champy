@@ -39,9 +39,26 @@ def test_or():
 
     polytope = ((x <= 10) & (y <= 1)) | \
                ((x <= 3) & (y <= 9))
-    print(polytope)
 
     solution = polytope.maximize(x+y)
-    print(solution)
     assert solution[x] == pytest.approx(3)
     assert solution[y] == pytest.approx(9)
+
+    solution = polytope.maximize(2*x+y)
+    assert solution[x] == pytest.approx(10)
+    assert solution[y] == pytest.approx(1)
+
+
+def test_abs():
+    x = Variable('x', lo=0)
+    y = Variable('y', lo=0)
+
+    polytope = (x + 3*y <= 10) & \
+               (3*x + y <= 10)
+
+    objective = abs(x-7) + abs(y-5)
+    print(objective)
+    print(objective._polytope)    
+    solution = polytope.maximize(objective)
+    assert solution[x] == pytest.approx(10./4)
+    assert solution[y] == pytest.approx(10./4)
