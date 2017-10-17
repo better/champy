@@ -56,9 +56,14 @@ def test_abs():
     polytope = (x + 3*y <= 10) & \
                (3*x + y <= 10)
 
-    objective = abs(x-7) + abs(y-5)
-    print(objective)
-    print(objective._polytope)    
-    solution = polytope.maximize(objective)
+    solution = polytope.minimize(abs(x-7))
+    assert solution[x] == pytest.approx(10./3)
+    assert solution[y] == pytest.approx(0.0)
+
+    solution = polytope.minimize(abs(y-7))
+    assert solution[x] == pytest.approx(0.0)
+    assert solution[y] == pytest.approx(10./3)
+
+    solution = polytope.minimize(abs(x-7) + abs(y-7))
     assert solution[x] == pytest.approx(10./4)
     assert solution[y] == pytest.approx(10./4)

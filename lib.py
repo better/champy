@@ -4,6 +4,8 @@ class Expression:
     def __init__(self, expr, constant=0, polytope=None):
         self._expr = expr
         self._constant = constant
+        if polytope is None:
+            polytope = Polytope()
         self._polytope = polytope # only used for certain ones tied to the definition (see abs)
 
     def __mul__(self, rhs):
@@ -37,7 +39,7 @@ class Expression:
             return Expression(
                 tuple((c, v) for v, c in vs.items()),
                 self._constant + rhs._constant,
-                self._polytope
+                self._polytope & rhs._polytope
             )
 
     def __radd__(self, lhs):
@@ -120,7 +122,7 @@ class CategoricalVariable:
 
 
 class Polytope:
-    def __init__(self, constraints):
+    def __init__(self, constraints=tuple()):
         self._constraints = tuple(constraints)
 
     @staticmethod
@@ -162,14 +164,23 @@ class Polytope:
         for k, v in objective._expr:
             ot_objective.SetCoefficient(get_var(v), k * sign)
         ot_objective.SetMaximization()
-        # TODO: need some recursive thing here to find all constraints
-        for c, op in self._constraints:
-            if op == '==':
-                ot_constraint = ot_solver.Constraint(c._constant, c._constant)
-            elif op == '>=':
-                ot_constraint = ot_solver.Constraint(c._constant, ot_solver.infinity())
-            for k, v in c._expr:
-                ot_constraint.SetCoefficient(get_var(v), k)
+        added_polytopes = set()
+        def add_polytope(p):
+            if p in added_polytopes:
+                return
+            added_polytopes.add(p)
+            for c, op in p._constraints:
+                if op == '==':
+                    ot_constraint = ot_solver.Constraint(-c._constant, -c._constant)
+                elif op == '>=':
+                    ot_constraint = ot_solver.Constraint(c._constant, ot_solver.infinity())
+                for k, v in c._expr:
+                    ot_constraint.SetCoefficient(get_var(v), k)
+                if c._polytope:
+                    add_polytope(c._polytope)
+        add_polytope(self)
+        if objective._polytope:
+            add_polytope(objective._polytope)
         res = ot_solver.Solve()
         solution = {}
         for v, nv in ot_variables.items():
@@ -187,3 +198,6 @@ class Polytope:
 
     def __repr__(self):
         return str(self)
+
+    def __hash__(self):
+        return hash(str(self))
