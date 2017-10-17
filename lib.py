@@ -20,7 +20,17 @@ class Expression:
         return self * lhs
 
     def __truediv__(self, rhs):
-        return self * (1./rhs)
+        if type(rhs) in [float, int]:
+            return self * (1./rhs)
+        else:
+            assert isinstance(rhs, Expression)
+            return QuotientExpression(self, rhs)
+
+    def __rtruediv__(self, lhs):
+        if type(lhs) in [float, int]:
+            lhs = Expression(tuple(), lhs)
+        assert isinstance(lhs, Expression)
+        return QuotientExpression(lhs, self)
 
     def __add__(self, rhs):
         if type(rhs) in [float, int]:
@@ -58,7 +68,7 @@ class Expression:
     #    return Polytope(((-self - rhs, '>'),))
 
     def __le__(self, rhs):
-        return Polytope(((-self - rhs, '>='),))
+        return Polytope(((rhs - self, '>='),))
 
     #def __gt__(self, rhs):
     #    return Polytope(((self - rhs, '>'),))
@@ -82,6 +92,23 @@ class Expression:
 
     def __repr__(self):
         return str(self)
+
+
+class QuotientExpression:
+    # Not an Expression subclass. Can only be used to compare with constants.
+    # Useful for saying eg (x + 5) / (y + 2) <= 3
+    def __init__(self, nom, den):
+        self._nom = nom
+        self._den = den
+
+    def __le__(self, rhs):
+        return Polytope(((self._den * rhs - self._nom, '>='),))
+
+    def __ge__(self, rhs):
+        return Polytope(((self._nom - self._den * rhs, '>='),))
+
+    def __eq__(self, rhs):
+        return Polytope(((self._den * rhs - self._nom, '=='),))
 
 
 class Variable(Expression):
@@ -173,7 +200,7 @@ class Polytope:
                 if op == '==':
                     ot_constraint = ot_solver.Constraint(-c._constant, -c._constant)
                 elif op == '>=':
-                    ot_constraint = ot_solver.Constraint(c._constant, ot_solver.infinity())
+                    ot_constraint = ot_solver.Constraint(-c._constant, ot_solver.infinity())
                 for k, v in c._expr:
                     ot_constraint.SetCoefficient(get_var(v), k)
                 if c._polytope:
