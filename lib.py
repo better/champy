@@ -142,10 +142,23 @@ class CategoricalVariable:
     # This actually isn't a variable, just a convenience wrapper
     def __init__(self, name='untitled', options=[]):
         self._name = name
-        self.options = {o: Variable(name='%s==%s' % (name, o), type=bool) for o in options}
+        self._options = options
+        self._vars = {o: Variable(name='[%s==%s]' % (name, o), type=bool) for o in options}
+        polytope = sum(self._vars.values()) == 1
+        for v in self._vars.values():
+            v._polytope = polytope
 
     def __eq__(self, rhs):
-        return self == self._options[rhs]
+        if isinstance(rhs, CategoricalVariable):
+            assert self._options == rhs._options
+            return Polytope.all(self._vars[o] == rhs._vars[o] for o in self._options)
+        else:
+            assert rhs in self._vars
+            return self._vars[rhs] == 1
+
+    def __ne__(self, rhs):
+        # TODO: support rhs being another CategoricalVariable
+        return self != self._options[rhs]
 
 
 class Polytope:
@@ -175,6 +188,9 @@ class Polytope:
         return Polytope.any((self, rhs))
     
     def optimize(self, objective, sign):
+        if not isinstance(objective, Expression):
+            # Not a function of the variables, so let's just replace it with a constant 0
+            objective = Expression(tuple())
         ot_solver = pywraplp.Solver('test', pywraplp.Solver.CBC_MIXED_INTEGER_PROGRAMMING)
         ot_variables = {}
         ot_objective = ot_solver.Objective()

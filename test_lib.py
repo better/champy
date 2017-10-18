@@ -96,3 +96,15 @@ def test_abs():
     solution = polytope.minimize(abs(x-7) + abs(y-7))
     assert solution[x] == pytest.approx(10./4)
     assert solution[y] == pytest.approx(10./4)
+
+
+def test_categorical():
+    x = CategoricalVariable('x', ['A', 'B', 'C'])
+    y = CategoricalVariable('y', ['A', 'B', 'C'])
+
+    polytope = (x == 'C') & (x == y)
+    solution = polytope.minimize(1)
+
+    # TODO: this is really clunky syntax, let's fix it later
+    assert solution[x._vars['C']] == 1
+    assert solution[y._vars['C']] == 1
