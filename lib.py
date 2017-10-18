@@ -87,6 +87,20 @@ class Expression:
             0,
             self + z_neg + z_pos == 0)
 
+    def min(self):
+        # Compute a lower bound of the expression
+        s = self._constant
+        for k, v in self._expr:
+            if k > 0 and v._lo is None:
+                return None
+            elif k > 0:
+                s += k * v._lo
+            elif k < 0 and v._hi is None:
+                return None
+            elif k < 0:
+                s += k * v._hi
+        return s
+
     def __str__(self):
         return 'Expression(%s+%.2f)' % (''.join('%+.2f%s' % (k, v) for k, v in self._expr), self._constant)
 
@@ -170,15 +184,30 @@ class Polytope:
         return Polytope(sum((c._constraints for c in polytopes), tuple()))
 
     @staticmethod
-    def any(polytopes, big_M=999999):
+    def any(polytopes, big_M=None):
         # This one is the most interesting
+        # The idea is to hand out n-1 "free cards" where a free card magically solves the inequality
         polytopes = tuple(polytopes)
         magic = [Variable('magic', type=bool) for p in polytopes]
         new_constraints = []
         for polytope, m in zip(polytopes, magic):
             for expr, op in polytope._constraints:
-                # TODO: need to handle equality constraints here
-                new_constraints.append((expr + m * big_M, op))
+                if op == '==':
+                    # Rewrite equality to two inequalities
+                    exprs = [expr, -expr]
+                else:
+                    exprs = [expr]
+                for expr in exprs:
+                    if big_M is None:
+                        lower_bound = expr.min()
+                        if lower_bound is None:
+                            raise Exception('big_M is not provided and %s is unbounded' % expr)
+                        else:
+                            magic_term = -lower_bound
+                    else:
+                        magic_term = big_M
+                    new_constraints.append((expr + m * magic_term, '>='))
+
         return Polytope(new_constraints) & (sum(magic) <= len(polytopes)-1)
 
     def __and__(self, rhs):

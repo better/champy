@@ -63,8 +63,8 @@ def test_quotient():
 
 
 def test_or():
-    x = Variable('x', lo=0)
-    y = Variable('y', lo=0)
+    x = Variable('x', lo=0, hi=100)
+    y = Variable('y', lo=0, hi=100)
 
     polytope = ((x <= 10) & (y <= 1)) | \
                ((x <= 3) & (y <= 9))
@@ -76,6 +76,17 @@ def test_or():
     solution = polytope.maximize(2*x+y)
     assert solution[x] == pytest.approx(10)
     assert solution[y] == pytest.approx(1)
+
+
+def test_or_equality():
+    x = Variable('x', lo=0, hi=100)
+    polytope = (x == 3) | (x == 5)
+
+    solution = polytope.maximize(x)
+    assert solution[x] == pytest.approx(5)
+
+    solution = polytope.minimize(x)
+    assert solution[x] == pytest.approx(3)
 
 
 def test_abs():
