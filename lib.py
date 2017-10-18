@@ -149,7 +149,7 @@ class Variable(Expression):
         return 'Variable#%s' % self._id
 
     def __hash__(self):
-        return hash(self._id)
+        return id(self)
 
 
 class CategoricalVariable:
@@ -272,4 +272,4 @@ class Polytope:
         return str(self)
 
     def __hash__(self):
-        return hash(str(self))
+        return id(self)
