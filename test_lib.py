@@ -132,3 +132,15 @@ def test_categorical():
 
     assert solution[x] == 'C'
     assert solution[y] == 'C'
+
+def test_categorical_inequality_checkerboard():
+    n = 4
+    board = [[Categorical('x', [1, 0]) for col in range(n)]
+             for row in range(n)]
+    constraints = [board[row][col] != board[row+1][col] for col in range(n) for row in range(n-1)] + \
+                  [board[row][col] != board[row][col+1] for col in range(n-1) for row in range(n)]
+    solution = Polytope.all(constraints).minimize(1)
+    solution = [[solution[board[row][col]] for col in range(n)]
+                for row in range(n)]
+    assert solution == [[0, 1, 0, 1], [1, 0, 1, 0], [0, 1, 0, 1], [1, 0, 1, 0]] or \
+        solution == [[1, 0, 1, 0], [0, 1, 0, 1], [1, 0, 1, 0], [0, 1, 0, 1]]

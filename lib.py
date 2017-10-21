@@ -134,9 +134,11 @@ class Scalar(Variable, Expression):
     _SELF = object()
     def __init__(self, name='untitled', lo=None, hi=None, type=float, variable=_SELF):
         self._name = name
+        if type == bool:
+            lo, hi = 0, 1
         self._lo = lo
         self._hi = hi
-        self._type=type
+        self._type = type
         if variable is Scalar._SELF:
             variable = self
         self._variable = variable
@@ -181,8 +183,13 @@ class Categorical(Variable):
             return self._vars[rhs] == 1
 
     def __ne__(self, rhs):
-        # TODO: support rhs being another CategoricalVariable
-        return self != self._options[rhs]
+        if isinstance(rhs, Categorical):
+            assert self._options == rhs._options
+            return Polytope.any((self._vars[o] == 1) & (rhs._vars[o] == 0)
+                                for o in self._options)
+        else:
+            assert rhs in self._vars
+            return self != self._options[rhs]
 
     def __hash__(self):
         return id(self)
