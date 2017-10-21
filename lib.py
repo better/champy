@@ -131,21 +131,13 @@ class Variable:
 
 
 class Scalar(Variable, Expression):
-    _ids = {}
-    def __init__(self, name=None, lo=None, hi=None, type=float, variable=None):
+    _SELF = object()
+    def __init__(self, name='untitled', lo=None, hi=None, type=float, variable=_SELF):
         self._name = name
         self._lo = lo
         self._hi = hi
         self._type=type
-        if name is None:
-            id = 'untitled'
-        else:
-            id = name
-        if name in Scalar._ids:
-            id += '_%d' % Scalar._ids[name]
-        Scalar._ids[name] = Scalar._ids.get(name, 0) + 1
-        self._id = id
-        if variable is None:
+        if variable is Scalar._SELF:
             variable = self
         self._variable = variable
         super(Scalar, self).__init__(((1, self),))
@@ -160,10 +152,10 @@ class Scalar(Variable, Expression):
         return id(self)
 
     def __str__(self):
-        return self._id
+        return 'Variable#%s' % self._name
 
     def __repr__(self):
-        return 'Variable#%s' % self._id
+        return str(self)
 
 
 class Categorical(Variable):
@@ -214,7 +206,7 @@ class Polytope:
         # This one is the most interesting
         # The idea is to hand out n-1 "free cards" where a free card magically solves the inequality
         polytopes = tuple(polytopes)
-        magic = [Scalar('magic', type=bool) for p in polytopes]
+        magic = [Scalar('magic', type=bool, variable=None) for p in polytopes]
         new_constraints = []
         for polytope, m in zip(polytopes, magic):
             for expr, op in polytope._constraints:
@@ -249,20 +241,28 @@ class Polytope:
         ot_solver = pywraplp.Solver('test', pywraplp.Solver.CBC_MIXED_INTEGER_PROGRAMMING)
         variables = set()
         ot_variables = {}
+        ot_variable_name_count = {}
         ot_objective = ot_solver.Objective()
         cls = {int: lambda lo, hi, name: ot_solver.IntVar(lo, hi, name),
                float: lambda lo, hi, name: ot_solver.NumVar(lo, hi, name),
                bool: lambda lo, hi, name: ot_solver.BoolVar(name)}
-        def get_var(v):
+        def get_ot_var(v):
             if v not in ot_variables:
+                if v._name in ot_variable_name_count:
+                    name = '%s[%d]' % (v._name, ot_variable_name_count[v._name])
+                else:
+                    name = v._name
+                ot_variable_name_count[v._name] = ot_variable_name_count.get(v._name, 0) + 1
                 ot_variables[v] = cls[v._type](v._lo if v._lo is not None else -ot_solver.infinity(),
                                                v._hi if v._hi is not None else ot_solver.infinity(),
-                                               v._id)
-                variables.add(v.variable())
+                                               name)
+                variable = v.variable()
+                if variable is not None:
+                    variables.add(variable)
             return ot_variables[v]
 
         for k, v in objective._expr:
-            ot_objective.SetCoefficient(get_var(v), k * sign)
+            ot_objective.SetCoefficient(get_ot_var(v), k * sign)
         ot_objective.SetMaximization()
         added_polytopes = set()
         def add_polytope(p):
@@ -275,7 +275,7 @@ class Polytope:
                 elif op == '>=':
                     ot_constraint = ot_solver.Constraint(-c._constant, ot_solver.infinity())
                 for k, v in c._expr:
-                    ot_constraint.SetCoefficient(get_var(v), k)
+                    ot_constraint.SetCoefficient(get_ot_var(v), k)
                 if c._polytope:
                     add_polytope(c._polytope)
         add_polytope(self)

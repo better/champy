@@ -34,6 +34,20 @@ def test_simple():
     assert solution[y] == pytest.approx(0)
 
 
+def test_same_name():
+    x1 = Scalar('x', lo=0)
+    x2 = Scalar('x', lo=0)
+    assert str(x1) == str(x2)
+    assert x1 is not x2
+
+    polytope = (x1 + 3*x2 <= 10) & \
+               (3*x1 + x2 <= 10)
+
+    solution = polytope.maximize(5*x1 + x2)
+    assert solution[x1] == pytest.approx(10./3)
+    assert solution[x2] == pytest.approx(0)
+
+
 def test_simple_integer():
     x = Scalar('x', lo=0, type=int)
     y = Scalar('y', lo=0, type=int)
