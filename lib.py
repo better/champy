@@ -80,8 +80,8 @@ class Expression:
         return Polytope(((self - rhs, '=='),))
 
     def __abs__(self):
-        z_neg = Variable('z_neg', lo=0, hi=None)
-        z_pos = Variable('z_pos', lo=0, hi=None)
+        z_neg = Scalar('z_neg', lo=0, hi=None)
+        z_pos = Scalar('z_pos', lo=0, hi=None)
         return Expression(
             ((1, z_neg), (1, z_pos)),
             0,
@@ -125,9 +125,14 @@ class QuotientExpression:
         return Polytope(((self._den * rhs - self._nom, '=='),))
 
 
-class Variable(Expression):
+class Variable:
+    # Provides a higher level abstractions on top of variables
+    pass
+
+
+class Scalar(Variable, Expression):
     _ids = {}
-    def __init__(self, name=None, lo=None, hi=None, type=float):
+    def __init__(self, name=None, lo=None, hi=None, type=float, variable=None):
         self._name = name
         self._lo = lo
         self._hi = hi
@@ -136,11 +141,23 @@ class Variable(Expression):
             id = 'untitled'
         else:
             id = name
-        if name in Variable._ids:
-            id += '_%d' % Variable._ids[name]
-        Variable._ids[name] = Variable._ids.get(name, 0) + 1
+        if name in Scalar._ids:
+            id += '_%d' % Scalar._ids[name]
+        Scalar._ids[name] = Scalar._ids.get(name, 0) + 1
         self._id = id
-        super(Variable, self).__init__(((1, self),))
+        if variable is None:
+            variable = self
+        self._variable = variable
+        super(Scalar, self).__init__(((1, self),))
+
+    def variable(self):
+        return self._variable
+
+    def value(self, scalars):
+        return scalars[self]
+
+    def __hash__(self):
+        return id(self)
 
     def __str__(self):
         return self._id
@@ -148,22 +165,23 @@ class Variable(Expression):
     def __repr__(self):
         return 'Variable#%s' % self._id
 
-    def __hash__(self):
-        return id(self)
 
-
-class CategoricalVariable:
-    # This actually isn't a variable, just a convenience wrapper
+class Categorical(Variable):
     def __init__(self, name='untitled', options=[]):
         self._name = name
         self._options = options
-        self._vars = {o: Variable(name='[%s==%s]' % (name, o), type=bool) for o in options}
+        self._vars = {o: Scalar(name='[%s==%s]' % (name, o), type=bool, variable=self) for o in options}
         polytope = sum(self._vars.values()) == 1
         for v in self._vars.values():
             v._polytope = polytope
 
+    def value(self, scalars):
+        for o, scalar in self._vars.items():
+            if scalars[scalar] == 1:
+                return o
+
     def __eq__(self, rhs):
-        if isinstance(rhs, CategoricalVariable):
+        if isinstance(rhs, Categorical):
             assert self._options == rhs._options
             return Polytope.all(self._vars[o] == rhs._vars[o] for o in self._options)
         else:
@@ -174,6 +192,14 @@ class CategoricalVariable:
         # TODO: support rhs being another CategoricalVariable
         return self != self._options[rhs]
 
+    def __hash__(self):
+        return id(self)
+
+    def __str__(self):
+        return 'Categorical#%s' % self._name
+
+    def __repr__(self):
+        return str(self)
 
 class Polytope:
     def __init__(self, constraints=tuple()):
@@ -188,7 +214,7 @@ class Polytope:
         # This one is the most interesting
         # The idea is to hand out n-1 "free cards" where a free card magically solves the inequality
         polytopes = tuple(polytopes)
-        magic = [Variable('magic', type=bool) for p in polytopes]
+        magic = [Scalar('magic', type=bool) for p in polytopes]
         new_constraints = []
         for polytope, m in zip(polytopes, magic):
             for expr, op in polytope._constraints:
@@ -221,6 +247,7 @@ class Polytope:
             # Not a function of the variables, so let's just replace it with a constant 0
             objective = Expression(tuple())
         ot_solver = pywraplp.Solver('test', pywraplp.Solver.CBC_MIXED_INTEGER_PROGRAMMING)
+        variables = set()
         ot_variables = {}
         ot_objective = ot_solver.Objective()
         cls = {int: lambda lo, hi, name: ot_solver.IntVar(lo, hi, name),
@@ -231,6 +258,7 @@ class Polytope:
                 ot_variables[v] = cls[v._type](v._lo if v._lo is not None else -ot_solver.infinity(),
                                                v._hi if v._hi is not None else ot_solver.infinity(),
                                                v._id)
+                variables.add(v.variable())
             return ot_variables[v]
 
         for k, v in objective._expr:
@@ -254,9 +282,12 @@ class Polytope:
         if objective._polytope:
             add_polytope(objective._polytope)
         res = ot_solver.Solve()
-        solution = {}
+        scalar_values = {}
         for v, nv in ot_variables.items():
-            solution[v] = nv.solution_value()
+            scalar_values[v] = nv.solution_value()
+        solution = {}
+        for v in variables:
+            solution[v] = v.value(scalar_values)
         return solution
 
     def maximize(self, objective):
