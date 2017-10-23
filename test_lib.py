@@ -123,6 +123,13 @@ def test_abs():
     assert solution[y] == pytest.approx(10./4)
 
 
+def test_abs_2():
+    z = Scalar('z', lo=0, hi=100)
+    polytope = z >= 5
+    solution = polytope.minimize(abs(z-1))
+    assert solution[z] == 5
+
+
 def test_categorical():
     x = Categorical('x', ['A', 'B', 'C'])
     y = Categorical('y', ['A', 'B', 'C'])
@@ -132,6 +139,7 @@ def test_categorical():
 
     assert solution[x] == 'C'
     assert solution[y] == 'C'
+
 
 def test_categorical_inequality_checkerboard():
     n = 4
@@ -144,3 +152,21 @@ def test_categorical_inequality_checkerboard():
                 for row in range(n)]
     assert solution == [[0, 1, 0, 1], [1, 0, 1, 0], [0, 1, 0, 1], [1, 0, 1, 0]] or \
         solution == [[1, 0, 1, 0], [0, 1, 0, 1], [1, 0, 1, 0], [0, 1, 0, 1]]
+
+
+def test_switch():
+    x = Scalar(lo=0, hi=10)
+    y = Scalar(lo=0, hi=10)
+
+    polytope = Polytope.switch({
+        y <= 5: x <= 10,
+        y <= 10: x <= 5
+    })
+
+    solution = polytope.minimize(abs(x-9) + abs(y-10))
+    assert solution[x] == pytest.approx(5)
+    assert solution[y] == pytest.approx(10)
+
+    solution = polytope.minimize(abs(x-10) + abs(y-9))
+    assert solution[x] == pytest.approx(10)
+    assert solution[y] == pytest.approx(5)

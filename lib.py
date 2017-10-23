@@ -85,7 +85,7 @@ class Expression:
         return Expression(
             ((1, z_neg), (1, z_pos)),
             0,
-            self + z_neg + z_pos == 0)
+            self + z_pos - z_neg == 0)
 
     def min(self):
         # Compute a lower bound of the expression
@@ -235,6 +235,10 @@ class Polytope:
 
         return Polytope(new_constraints) & (sum(magic) <= len(polytopes)-1)
 
+    @staticmethod
+    def switch(exprs):
+        return Polytope.any(k & v for k, v in exprs.items())
+
     def __and__(self, rhs):
         return Polytope.all((self, rhs))
 
@@ -256,7 +260,7 @@ class Polytope:
         def get_ot_var(v):
             if v not in ot_variables:
                 if v._name in ot_variable_name_count:
-                    name = '%s[%d]' % (v._name, ot_variable_name_count[v._name])
+                    name = '%s_%d' % (v._name, ot_variable_name_count[v._name])
                 else:
                     name = v._name
                 ot_variable_name_count[v._name] = ot_variable_name_count.get(v._name, 0) + 1
@@ -289,6 +293,7 @@ class Polytope:
         if objective._polytope:
             add_polytope(objective._polytope)
         res = ot_solver.Solve()
+        assert res == ot_solver.OPTIMAL
         scalar_values = {}
         for v, nv in ot_variables.items():
             scalar_values[v] = nv.solution_value()
