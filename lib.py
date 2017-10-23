@@ -124,6 +124,15 @@ class QuotientExpression:
     def __eq__(self, rhs):
         return Polytope(((self._den * rhs - self._nom, '=='),))
 
+    def __mul__(self, rhs):
+        return QuotientExpression(self._nom * rhs, self._den)
+
+    def __rmul__(self, lhs):
+        return self * lhs
+
+    def __truediv__(self, rhs):
+        return QuotientExpression(self._nom, self._den * rhs)
+
 
 class Variable:
     # Provides a higher level abstractions on top of variables
@@ -179,7 +188,8 @@ class Categorical(Variable):
             assert self._options == rhs._options
             return Polytope.all(self._vars[o] == rhs._vars[o] for o in self._options)
         else:
-            assert rhs in self._vars
+            if rhs not in self._vars:
+                raise Exception('%s not a valid option for %s: must be one of %s' % (rhs, self._name, ','.join(self._vars)))
             return self._vars[rhs] == 1
 
     def __ne__(self, rhs):

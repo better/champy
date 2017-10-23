@@ -68,8 +68,8 @@ def test_quotient():
     x = Scalar('x', lo=0)
     y = Scalar('y', lo=0)
 
-    polytope = (1 / y >= 2) & \
-               (y / (1 - x) <= 1)
+    polytope = (1 / y / 2 >= 1) & \
+               (y / (1 - x) * 10 <= 10)
 
     solution = polytope.maximize(x + 2*y)
     assert solution[x] == pytest.approx(0.5)
